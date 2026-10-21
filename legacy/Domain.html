@@ -1,0 +1,47 @@
+<script>
+const Domain = (() => {
+  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim();
+  const missing=s=>!s||/^(nao informado|nao disponivel|-)$/i.test(norm(s));
+  function price(s) {
+    const text=String(s||'').trim().replace(/^R\$\s*/, '').replace(/\s/g,'');
+    if(!/^(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?$/.test(text)) return null;
+    const n=Number(text.replace(/\./g,'').replace(',','.')); return Number.isFinite(n)&&n>0?n:null;
+  }
+  const money=n=>n==null?'Valor não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:2}).format(n);
+  const periods={
+    'segunda a quinta':[1,2,3,4], 'segunda a sexta':[1,2,3,4,5],
+    'segunda a domingo':[1,2,3,4,5,6,0], 'sexta-feira':[5],
+    'sexta a domingo e feriados':[5,6,0,7], 'sabado e domingo':[6,0],
+    'sabado, domingo e feriados':[6,0,7]
+  };
+  const groups={weekday:[1,2,3,4],friday:[5],weekend:[6,0,7]};
+  function eligible(row,period) {const days=periods[norm(row['Período identificado'])];return !!days&&!!groups[period]&&groups[period].some(d=>days.includes(d));}
+  function prepare(rows) {return rows.map((r,i)=>({raw:r,id:i,name:missing(r['Casa para o site'])?r['Nome da casa']:r['Casa para o site'],price:price(r.Valor),guests:/^\d+$/.test((r['Quantidade de convidados']||'').trim())?Number(r['Quantidade de convidados']):null,year:(r['Ano da festa']||'').trim()}));}
+  function search(records,f) {
+    const grouped=new Map();
+    records.filter(q=>q.name&&q.price!==null&&norm(q.raw.Cidade)===norm(f.city)&&q.guests===Number(f.guests)&&q.year===String(f.year)&&eligible(q.raw,f.period)&&!norm(q.raw['Pacote identificado']).includes('escolar')).forEach(q=>{
+      // Use explicit identity, city and district. Never fuzzy-match venues.
+      const key=[norm(q.name),norm(q.raw.Cidade),norm(q.raw.Bairro)].join('|');
+      if(!grouped.has(key))grouped.set(key,[]); grouped.get(key).push(q);
+    });
+    return [...grouped].map(([key,quotes])=>{
+      quotes.sort((a,b)=>a.price-b.price||a.id-b.id);return {key,best:quotes[0],quotes};
+    }).filter(h=>(!f.district||norm(h.best.raw.Bairro)===norm(f.district))&&(!f.venue||norm(h.best.name).includes(norm(f.venue)))&&(!f.min||h.best.price>=Number(f.min))&&(!f.max||h.best.price<=Number(f.max))).sort((a,b)=>(f.sort==='desc'?-1:1)*(a.best.price-b.best.price)||a.best.name.localeCompare(b.best.name,'pt-BR'));
+  }
+  function quoteDate(s) {
+    const m=String(s||'').trim().match(/^(0?[1-9]|1[0-2])\/(\d{2}|\d{4})$/);
+    if(!m)return 'Data da cotação não informada';
+    const y=m[2].length===2?2000+Number(m[2]):Number(m[2]);
+    return 'Cotação registrada em '+new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(Date.UTC(y,Number(m[1])-1,1)))+'.';
+  }
+  function notices(h) {
+    const out=[],q=h.best,r=q.raw;
+    if(new Set(h.quotes.map(q=>q.raw['Pacote identificado']).filter(p=>!missing(p))).size>1)out.push('Este é o menor valor encontrado entre os pacotes compatíveis com sua busca. Outros pacotes podem ter valores e serviços diferentes.');
+    if(new Set(h.quotes.map(q=>q.raw['Condição do valor'])).size>1||/12h/.test(r['Condição do valor']||''))out.push('Esta casa possui condições de preço diferentes conforme o dia ou horário da festa. Consulte a casa para conhecer as demais opções.');
+    if(!missing(r['Pagamento identificado']))out.push('Valor referente à condição de pagamento indicada. Consulte outras formas de pagamento diretamente com a casa.');
+    if(!/feriado/.test(norm(r['Período identificado'])))out.push('Feriados não confirmados para esta condição.');
+    return out;
+  }
+  return {norm,missing,price,money,eligible,prepare,search,quoteDate,notices};
+})();
+</script>

@@ -1,0 +1,10 @@
+import {useId,useRef,useState} from 'react';
+import type {ManualOption} from '../types';
+export const MAX_MANUAL_OPTIONS=20;
+export function ManualQuoteOptions({onChange}:{onChange:(options:ManualOption[])=>void}){
+ const prefix=useId(),nextId=useRef(1),[rows,setRows]=useState([{id:0,guests:'',price:''}]);
+ const update=(items:typeof rows)=>{setRows(items);onChange(items.map(({guests,price})=>({guests,price})));};
+ return <section className="manual-options" aria-labelledby={prefix+'-heading'}><h3 id={prefix+'-heading'}>Quantidades e valores da cotação</h3><p className="private-note">Adicione uma opção para cada quantidade de convidados que aparece no orçamento. Informe o valor total de cada opção; não calculamos preços proporcionais. Ano, pacote e condições abaixo valem para todas as opções deste envio.</p>
+ {rows.map((row,index)=><fieldset className="manual-option" key={row.id}><legend>Opção {index+1}</legend><div className="option-fields"><label htmlFor={prefix+'-guests-'+row.id}>Quantidade de convidados *<input id={prefix+'-guests-'+row.id} type="number" min="1" max="99999" step="1" required value={row.guests} onChange={e=>update(rows.map(item=>item.id===row.id?{...item,guests:e.target.value}:item))}/></label><label htmlFor={prefix+'-price-'+row.id}>Valor total em reais *<input id={prefix+'-price-'+row.id} type="number" min="0.01" max="100000000" step="0.01" required value={row.price} onChange={e=>update(rows.map(item=>item.id===row.id?{...item,price:e.target.value}:item))}/></label>{rows.length>1&&<button type="button" className="subtle remove-option" aria-label={'Remover opção '+(index+1)} onClick={()=>update(rows.filter(item=>item.id!==row.id))}>Remover ×</button>}</div></fieldset>)}
+ <button type="button" className="subtle add-option" disabled={rows.length>=MAX_MANUAL_OPTIONS} onClick={()=>update([...rows,{id:nextId.current++,guests:'',price:''}])}>+ Adicionar outra quantidade e valor</button><small className="option-limit">Até {MAX_MANUAL_OPTIONS} opções no mesmo envio.</small></section>;
+}

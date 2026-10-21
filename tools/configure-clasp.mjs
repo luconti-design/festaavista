@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const scriptId=process.argv[2],deploymentId=process.argv[3];
+if(!scriptId||!/^[a-zA-Z0-9_-]{20,}$/.test(scriptId))throw new Error('Uso: npm run gas:configure -- SCRIPT_ID [DEPLOYMENT_ID_EXISTENTE]');
+if(deploymentId&&!/^[a-zA-Z0-9_-]{20,}$/.test(deploymentId))throw new Error('ID de implantação inválido');
+let previous={};if(fs.existsSync('.clasp.json'))previous=JSON.parse(fs.readFileSync('.clasp.json','utf8'));
+if(previous.scriptId&&previous.scriptId!==scriptId)throw new Error('Já existe outro projeto configurado. Revise .clasp.json antes de substituir.');
+fs.writeFileSync('.clasp.json',JSON.stringify({...previous,scriptId,rootDir:'dist/apps-script'},null,2)+'\n');
+fs.mkdirSync('.local',{recursive:true});
+if(deploymentId)fs.writeFileSync('.local/deployment.json',JSON.stringify({deploymentId},null,2));
+console.log('Projeto configurado localmente; nenhum dado enviado ao Google.');

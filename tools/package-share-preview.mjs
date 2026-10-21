@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const directory='dist/netlify-preview';
+const data=JSON.parse(fs.readFileSync('.local/share-preview-data.json','utf8'));
+assert.ok(data.rows.length&&Number.isFinite(Date.parse(data.fetchedAt)));
+fs.writeFileSync(directory+'/preview-data.json',JSON.stringify(data));
+assert.ok(fs.existsSync(directory+'/index.html'));
+const scripts=fs.readdirSync(directory+'/assets').filter(file=>file.endsWith('.js')).map(file=>fs.readFileSync(directory+'/assets/'+file,'utf8')).join('\n');
+assert.ok(scripts.includes('PRÉVIA PARA AVALIAÇÃO')&&scripts.includes('preview-data.json'));
+assert.ok(!scripts.includes('DEMO LOCAL')&&!scripts.includes('SUBMISSION_SECRET'));
+assert.ok(!fs.readdirSync(directory).some(file=>file.endsWith('.gs')||file==='appsscript.json'));
+console.log('Pasta pronta para Netlify Drop: '+directory+' · dados capturados, sem envios.');

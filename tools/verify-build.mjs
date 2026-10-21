@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+const root='dist/apps-script/';
+const entry=fs.readFileSync(root+'Index.html','utf8'),js=fs.readFileSync(root+'JavaScript.html','utf8');
+assert.ok(entry.includes("include_('JavaScript')")&&entry.includes("include_('Styles')"));
+assert.ok(entry.includes('id="root"'));
+assert.ok(!entry.includes('/src/')&&!entry.includes('assets/'));
+assert.ok(!js.includes('DEMO LOCAL')&&!js.includes('LOCAL-MOCK')&&!js.includes('/official-csv'));
+assert.ok(!js.includes('preview-data.json')&&!js.includes('PRÉVIA PARA AVALIAÇÃO'));
+new vm.Script(js.replace(/^<script type="module">\s*/,'').replace(/\s*<\/script>$/,''),{filename:'JavaScript.html'});
+for(const file of fs.readdirSync('apps-script').filter(f=>f.endsWith('.gs')))assert.equal(fs.readFileSync(root+file,'utf8'),fs.readFileSync('apps-script/'+file,'utf8'));
+console.log('Build verificado: React e CSS inline, sem mocks/proxy local, backend sincronizado.');

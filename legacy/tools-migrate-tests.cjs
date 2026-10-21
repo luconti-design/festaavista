@@ -1,0 +1,15 @@
+const fs=require('node:fs');
+let s=fs.readFileSync('tests/domain.test.cjs','utf8');
+fs.copyFileSync('tests/domain.test.cjs','legacy/domain.test.cjs');
+s=s.slice(s.indexOf('// Synthetic fixtures'));
+s="import {test} from 'vitest';\nimport assert from 'node:assert/strict';\nimport * as D from '../src/services/domain';\nimport type {Filters,RawQuote} from '../src/types';\n"+s;
+s=s.replace('const row=(overrides={})','const row=(overrides:RawQuote={})').replace('const f={',"const f:Filters={district:'',sort:'asc',venue:'',min:'',max:'',").replace('guests:90',"guests:'90'").replace('min:9000,max:11000',"min:'9000',max:'11000'");
+fs.writeFileSync('tests/domain.test.ts',s);fs.unlinkSync('tests/domain.test.cjs');
+let b=fs.readFileSync('tests/backend.test.cjs','utf8');
+b=b.replace("'ContributionsService.gs'];","'ContributionsService.gs','UploadsService.gs'];");
+b=b.replace("fs.readFileSync(f,'utf8')","fs.readFileSync('apps-script/'+f,'utf8')").replace("fs.readdirSync('.')","fs.readdirSync('apps-script')");
+b=b.replace("['beginContribution','doGet','getQuotes','submitContribution']","['beginContribution','doGet','getQuotes','submitContribution','uploadContributionChunk']");
+b=b.replace("p.files=[f];assert.equal(ctx.validateContribution_(p).files.length,1);","const original=ctx.resolveUploadedFile_;ctx.resolveUploadedFile_=()=>({});p.files=[{uploadId:'a'.repeat(30)}];assert.equal(ctx.validateContribution_(p).files.length,1);ctx.resolveUploadedFile_=original;");
+b=b.replace("p.files=[f,f,f,f]","p.files=[f,f,f,f]");
+b=b.replace("const docs=payload();docs.type='documents';docs.files=[{name:'x.pdf',type:'application/pdf',data:Buffer.from('%PDF-1.4 test').toString('base64')}];ctx.submitContribution_(docs);assert.equal(created.length,1);assert.match(lines[1][22],/private-test/);", "const docs=payload();docs.type='documents';docs.files=[{uploadId:'a'.repeat(30)}];const resolve=ctx.resolveUploadedFile_;ctx.resolveUploadedFile_=()=>({...resource,getUrl:()=> 'https://drive.google.com/private-test'});ctx.submitContribution_(docs);ctx.resolveUploadedFile_=resolve;assert.equal(created.length,0);assert.match(lines[1][22],/private-test/);");
+fs.writeFileSync('tests/backend.test.cjs',b);

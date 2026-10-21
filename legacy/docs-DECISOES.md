@@ -1,0 +1,16 @@
+# Decisões técnicas e comerciais
+
+1. A nova especificação substitui React/Vite e hospedagem Sites por Apps Script integral, sem runtime ou build externo. Google Fonts é apenas um aprimoramento tipográfico opcional; há fallback local Georgia/Arial. O projeto não usa o serviço Sites para hospedar.
+2. Não havia código existente no diretório. A implementação preserva a referência visual, e não componentes prévios inexistentes. A busca ganhou o quarto filtro obrigatório (período) e todos os avisos de responsabilidade, mesmo quando não presentes no mockup.
+3. Somente a coluna `Valor` participa do cálculo. Descontos nas observações não substituem o preço e não são calculados. Isso foi aprovado pelo responsável. As observações permanecem nos detalhes.
+4. `12h` representa almoço, conforme confirmação do responsável. A interface preserva a condição original e acrescenta `Almoço (12h)`. Não extrai duração desse horário.
+5. O filtro de fim de semana encontra propostas para sábado OU domingo OU feriado; mostra a condição real. Segunda a domingo não implica feriados. As restrições de vésperas e detalhes de horários permanecem nas observações; a aplicação não promete validade em uma data específica.
+6. Cidade, convidados e ano vêm dos dados. São Gonçalo aparece como sugestão de cidade no formulário de contribuição, mas só aparecerá na consulta quando houver registros na base. Anos antigos não são convertidos nem removidos silenciosamente.
+7. Quantidade é exata. Identidade usa `Casa para o site`, com fallback ao nome original, cidade e bairro normalizados. Não há associação aproximada por semelhança. Folia utiliza a identidade explícita da base; pacotes permanecem como propostas separadas.
+8. Pacotes com identificação escolar ficam fora do ranking. Períodos desconhecidos não ganham elegibilidade presumida. Valores não estritamente numéricos em BRL não entram no ranking. Uma futura nova regra comercial requer revisão explícita.
+9. O comparador só contém propostas compatíveis com a busca. Começa vazio e tem exatamente quatro seletores próprios. A listagem não contém checkboxes de comparação. Alterar filtros remove seleções que deixaram de ser elegíveis.
+10. Nos detalhes são mostradas todas as propostas compatíveis daquela casa, sem misturar anos ou capacidades. Duração só é extraída de expressões explícitas, sem interpretar horários; decoração permanece `Não informado` por não existir coluna dedicada na base atual. Observações e serviços originais continuam acessíveis.
+11. As contribuições são registradas integralmente em recursos independentes. Aprovação é um status administrativo, sem publicação automática. A rotina de revisão é a edição autenticada da própria planilha privada; não há endpoint de moderação público.
+12. O endpoint de cotações só lê a fonte pública. O backup é uma cópia temporária recuperável, substituída por cada leitura válida, jamais uma fonte editorial independente. O prazo de recuperação é de 24 horas e dados antigos são sinalizados.
+13. Sessões assinadas e um limite global por hora reduzem abuso simples. Não há promessa de proteção contra bots sofisticados. Em incidente, `CONTRIBUTIONS_PAUSED=true` bloqueia novos envios.
+14. O espaço publicitário é uma reserva de layout. Nenhum AdSense, conta, anúncio real ou política jurídica inventada foi acrescentado.

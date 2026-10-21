@@ -12,4 +12,3 @@ coverage/
 .vercel/
 *.log
 legacy/*.zip
-

@@ -1,0 +1,13 @@
+import type {Filters} from '../types';
+import {norm} from '../services/domain';
+import {useCatalog} from '../hooks/useCatalog';
+const unique=(values:string[])=>[...new Map(values.filter(Boolean).map(v=>[norm(v),v])).values()];
+export function SearchForm(){
+ const {records,filters,setFilters}=useCatalog();
+ const recordsInCity=records.filter(q=>norm(q.raw.Cidade)===norm(filters.city));
+ const values:Record<string,string[]>={city:unique(records.map(q=>q.raw.Cidade)).sort(),guests:unique(recordsInCity.map(q=>String(q.guests||''))).sort((a,b)=>+a-+b),year:unique(recordsInCity.map(q=>q.year)).sort()};
+ function update(key:keyof Filters,value:string){setFilters({...filters,[key]:value,...(key==='city'?{district:'',guests:'',year:''}:{})});}
+ return <form className="searchbar" onSubmit={e=>{e.preventDefault();document.getElementById('results')?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});}}>
+ {([['city','Cidade','♧'],['guests','Convidados','♙'],['year','Ano da festa','▦']] as const).map(([key,label,icon])=><label key={key}><span className="field-icon" aria-hidden="true">{key==='city'?<svg className="search-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>:key==='year'?<svg className="search-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg>:icon}</span><span>{label}<select required value={filters[key]} onChange={e=>update(key,e.target.value)} aria-label={label}><option value="">Selecionar</option>{filters[key]&&!values[key].some(v=>norm(v)===norm(filters[key]))&&<option value={filters[key]}>{filters[key]}{key==='year'?' · consultar referências':' · sem registros'}</option>}{values[key].map(v=><option key={v} value={v}>{v}{key==='guests'?' pessoas':''}</option>)}</select></span></label>)}
+ <label><span className="field-icon" aria-hidden="true">◷</span><span>Período<select required aria-label="Período" value={filters.period} onChange={e=>update('period',e.target.value)}><option value="">Selecionar</option><option value="weekday">Segunda a quinta</option><option value="friday">Sexta-feira</option><option value="weekend">Sáb., dom. ou feriado</option></select></span></label><button className="primary search-button" type="submit" aria-label="Buscar casas"><span>Buscar</span> ⟶</button></form>;
+}

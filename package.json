@@ -1,0 +1,34 @@
+{
+  "name": "festa-a-vista",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22.12.0"},
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build && node tools/build-apps-script.mjs && node tools/verify-build.mjs",
+    "build:share": "node tools/prepare-share-preview.mjs && tsc --noEmit && vite build --mode share-preview && node tools/package-share-preview.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run && node --test tests/backend.test.cjs tests/uploads-backend.test.cjs",
+    "check": "tsc --noEmit && node tools/check.cjs",
+    "deploy": "npm run build && node tools/deploy.mjs",
+    "gas:login": "clasp login",
+    "gas:configure": "node tools/configure-clasp.mjs",
+    "gas:push": "clasp push",
+    "package": "npm run build"
+  },
+  "dependencies": {"react": "^19.1.1", "react-dom": "^19.1.1", "react-router-dom": "^7.9.1"},
+  "devDependencies": {
+    "@google/clasp": "^3.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.4",
+    "jsdom": "^26.1.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1"
+  }
+}

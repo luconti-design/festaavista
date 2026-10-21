@@ -1,0 +1,139 @@
+<script>
+(() => {
+  const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const show=s=>Domain.missing(s)?'Não informado':s;
+  const disclaimer='Confirme valores e disponibilidade diretamente com a casa.';
+  let records=[],houses=[],selection=[null,null,null,null],page=1,loaded=false,view='ranking',ticket=null,type='documents',sending=false,loadingTicket=false;
+  const icons=['✧','♧','⌂','❀','☼'];
+  const icon=h=>icons[[...h.best.name].reduce((a,c)=>a+c.charCodeAt(0),0)%icons.length];
+  function rpc(method,payload) {return new Promise((resolve,reject)=>{
+    if(!window.google||!google.script||!google.script.run){reject(new Error('Abra a aplicação pelo endereço de implantação do Google Apps Script.'));return;}
+    const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    if(payload===undefined)runner[method]();else runner[method](payload);
+  });}
+  function options(id,values,preferred,all) {
+    const old=preferred??$(id).value;const unique=[...new Map(values.filter(Boolean).map(v=>[Domain.norm(v),v])).values()];
+    $(id).innerHTML=(all?'<option value="">'+esc(all)+'</option>':'')+unique.map(v=>'<option value="'+esc(v)+'">'+esc(v)+(id==='guests'?' pessoas':'')+'</option>').join('');
+    const match=unique.find(v=>Domain.norm(v)===Domain.norm(old));if(match)$(id).value=match;
+    else if(old&&!preferred&&['year','guests'].includes(id)){$(id).insertAdjacentHTML('beforeend','<option value="'+esc(old)+'">'+esc(old)+' (sem registros nesta cidade)</option>');$(id).value=old;}
+  }
+  function cityOptions(initial) {
+    const city=$('city').value;
+    options('city',records.map(q=>q.raw.Cidade).sort((a,b)=>a.localeCompare(b,'pt-BR')),initial?'Niterói':city);
+    dependentOptions(initial);
+  }
+  function dependentOptions(initial) {
+    const list=records.filter(q=>Domain.norm(q.raw.Cidade)===Domain.norm($('city').value));
+    options('guests',[...new Set(list.map(q=>q.guests).filter(Boolean))].sort((a,b)=>a-b).map(String),initial?'80':undefined);
+    options('year',[...new Set(list.map(q=>q.year).filter(y=>/^20\d{2}$/.test(y)))].sort(),initial?'2027':undefined);
+    options('district',list.map(q=>q.raw.Bairro).sort((a,b)=>a.localeCompare(b,'pt-BR')),undefined,'Bairro: Todos');
+  }
+  async function load() {
+    $('retry').hidden=true;$('status').textContent='Carregando a base colaborativa…';$('status').className='';
+    try {
+      const data=await rpc('getQuotes');records=Domain.prepare(data.rows);cityOptions(!loaded);loaded=true;
+      $('status').textContent=data.stale?data.warning:'Referências compartilhadas por famílias · Atualização automática da base';
+      $('status').className=data.stale?'error':'';
+      $('updated').textContent='Base consultada em '+new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(data.fetchedAt));
+      refresh();
+    } catch(e) {
+      $('status').className='error';$('status').textContent=e.message||'Não foi possível carregar dados confiáveis.';$('retry').hidden=false;
+      if(!loaded)$('ranking').innerHTML='<p class="empty">Não há dados confiáveis disponíveis no momento.</p>';
+    }
+  }
+  const filters=()=>Object.fromEntries(['city','guests','year','period','district','sort','venue','min','max'].map(k=>[k,$(k).value]));
+  function condition(q) {return show(q.raw['Condição do valor'])+(/12h/.test(q.raw['Condição do valor']||'')?' · Almoço (12h)':'');}
+  function refresh() {
+    if(!loaded)return;
+    houses=Domain.search(records,filters());page=1;
+    selection=selection.map(k=>houses.some(h=>h.key===k)?k:null);
+    $('count').textContent=houses.length+' '+(houses.length===1?'casa encontrada':'casas encontradas')+' · '+houses.reduce((n,h)=>n+h.quotes.length,0)+' orçamentos compatíveis';
+    renderRanking();renderComparison();renderList();
+  }
+  function renderRanking() {
+    $('ranking').innerHTML=houses.length?houses.slice(0,3).map((h,i)=>{
+      const q=h.best,r=q.raw;
+      return '<article class="card"><span class="rank">0'+(i+1)+'</span><div class="card-title"><span class="venue-icon" aria-hidden="true">'+icon(h)+'</span><div><h3>'+esc(q.name)+'</h3><span class="location">'+esc(show(r.Bairro))+', '+esc(r.Cidade)+'</span></div></div><span class="from">A partir de</span><strong class="price">'+esc(Domain.money(q.price))+'</strong><p class="meta">'+esc(q.year)+' · '+q.guests+' convidados<br>'+esc(condition(q))+'<br>'+esc(Domain.missing(r['Pacote identificado'])?'Pacote não informado':r['Pacote identificado'])+'<br>'+esc(Domain.missing(r['Pagamento identificado'])?'Pagamento não informado':r['Pagamento identificado'])+'</p><button class="detail-link" data-details="'+esc(h.key)+'">Ver detalhes ⟶</button>'+Domain.notices(h).map(t=>'<p class="notice">'+esc(t)+'</p>').join('')+'<p class="disclaimer">'+disclaimer+'</p></article>';
+    }).join(''):'<p class="empty">Não encontramos orçamentos para os filtros selecionados.<br>Altere os filtros para explorar outras referências.</p>';
+  }
+  const compareFields=[['Ano / convidados',q=>q.year+' · '+q.guests],['Condição do valor',condition],['Pacote',q=>q.raw['Pacote identificado']],['Período',q=>q.raw['Período identificado']],['Pagamento',q=>q.raw['Pagamento identificado']],['Localização',q=>show(q.raw.Bairro)+', '+q.raw.Cidade],['Duração',q=>duration(q.raw)],['Buffet',q=>q.raw.Buffet],['Brinquedos',q=>q.raw.Brinquedos],['Espaço baby',q=>q.raw['Espaço baby']],['Decoração',()=> 'Não informado'],['Cobertura',q=>q.raw.Cobertura],['Climatização',q=>q.raw.Climatização],['Área',q=>q.raw['Área total do espaço']],['Outros serviços',q=>q.raw['Outros serviços inclusos']]];
+  function duration(r) {
+    const explicit=r['Duração'];if(!Domain.missing(explicit))return explicit;
+    const text=(r['Observação da condição']||'')+' '+(r.Observações||'');
+    const matches=[...text.matchAll(/(?:dura[çc][ãa]o[^\d]{0,35}(\d+)\s*h|(?:festa|evento|com)\s+(?:com\s+)?(\d+)\s*h|\b(\d+)\s+horas de evento)/gi)].map(m=>m[1]||m[2]||m[3]);
+    return new Set(matches).size===1?matches[0]+' horas':'Não informado';
+  }
+  function renderComparison() {
+    const selected=selection.map(k=>houses.find(h=>h.key===k));
+    $('comparison').innerHTML='<div class="compare-top"><span>Escolha até 4 casas aqui.</span><span>'+selected.filter(Boolean).length+' de 4 selecionadas</span></div><div class="compare-scroll"><table class="compare-table"><thead><tr><th scope="col">Casa</th>'+selection.map((k,i)=>'<th scope="col"><label>Casa '+(i+1)+'<select data-slot="'+i+'" aria-label="Selecionar casa '+(i+1)+'"><option value="">Selecionar casa</option>'+houses.filter(h=>h.key===k||!selection.includes(h.key)).map(h=>'<option value="'+esc(h.key)+'"'+(k===h.key?' selected':'')+'>'+esc(h.best.name)+'</option>').join('')+'</select></label>'+(k?'<button class="remove" data-remove="'+i+'">Remover ×</button>':'')+'</th>').join('')+'</tr></thead><tbody><tr><th scope="row">Valor de referência</th>'+selected.map(h=>'<td class="compare-price">'+(h?esc(Domain.money(h.best.price)):'—')+'</td>').join('')+'</tr>'+compareFields.map(([name,get])=>'<tr><th scope="row">'+esc(name)+'</th>'+selected.map(h=>'<td>'+(h?esc(show(get(h.best))):'—')+'</td>').join('')+'</tr>').join('')+'<tr><th scope="row">Condições e avisos</th>'+selected.map(h=>'<td>'+(h?Domain.notices(h).map(esc).join('<br><br>')+'<p class="disclaimer">'+disclaimer+'</p><button class="detail-link" data-details="'+esc(h.key)+'">Ver detalhes ⟶</button>':'—')+'</td>').join('')+'</tr></tbody></table></div><p class="disclaimer">Deslize para comparar todas as casas. '+disclaimer+'</p>';
+  }
+  function renderList() {
+    const size=5,total=Math.ceil(houses.length/size);page=Math.min(page,Math.max(total,1));
+    $('listing').innerHTML=houses.slice((page-1)*size,page*size).map(h=>{
+      const q=h.best,r=q.raw;return '<button class="list-row" data-details="'+esc(h.key)+'" aria-label="Ver detalhes de '+esc(q.name)+'"><span class="list-name"><span class="venue-icon" aria-hidden="true">'+icon(h)+'</span><span><strong>'+esc(q.name)+'</strong><small>'+esc(show(r.Bairro))+', '+esc(r.Cidade)+'</small><small class="mobile-meta">'+q.guests+' convidados · Festa em '+esc(q.year)+'<br>'+esc(condition(q))+'</small></span></span><span class="desktop-cell">'+q.guests+'</span><span class="desktop-cell">'+esc(q.year)+'</span><span class="row-price">'+esc(Domain.money(q.price))+'</span><span class="row-condition">'+esc(condition(q))+'<br>'+esc(show(r['Pacote identificado']))+'<br>'+esc(show(r['Pagamento identificado']))+'</span><span aria-hidden="true">›</span></button>';
+    }).join('')||'<p class="empty">Não encontramos orçamentos para os filtros selecionados.</p>';
+    let pages=[];for(let i=1;i<=total;i++)if(i===1||i===total||Math.abs(i-page)<=1)pages.push(i);
+    $('pagination').innerHTML=total>1?'<button data-page="'+(page-1)+'" aria-label="Página anterior"'+(page===1?' disabled':'')+'>‹</button>'+pages.map((p,i)=>(i&&p>pages[i-1]+1?'<span>…</span>':'')+'<button data-page="'+p+'"'+(p===page?' class="selected" aria-current="page"':'')+'>'+p+'</button>').join('')+'<button data-page="'+(page+1)+'" aria-label="Próxima página"'+(page===total?' disabled':'')+'>›</button>':'';
+  }
+  const field=(name,value)=>'<div class="detail-field"><small>'+esc(name)+'</small>'+esc(show(value))+'</div>';
+  function contactLink(value,label,phone) {
+    if(Domain.missing(value))return field(label,'Não informado');
+    let url=String(value).trim();
+    if(phone) {const digits=url.replace(/\D/g,'');if(!/^\d{10,13}$/.test(digits))return field(label,value);url='tel:'+(url.startsWith('+')?'+':'')+digits;}
+    else {if(/^www\./i.test(url))url='https://'+url; if(/^@[a-z0-9._]+$/i.test(url))url='https://www.instagram.com/'+url.slice(1)+'/'; if(!/^https?:\/\//i.test(url))return field(label,value); try {const parsed=new URL(url);if(parsed.username||parsed.password)return field(label,value);}catch(_){return field(label,value);}}
+    return '<div class="detail-field"><small>'+esc(label)+'</small><a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">'+esc(value)+' ↗</a></div>';
+  }
+  function details(key) {
+    const h=houses.find(h=>h.key===key);if(!h)return;const r=h.best.raw;
+    $('detailsContent').innerHTML='<p class="eyebrow">CONHEÇA AS POSSIBILIDADES</p><h2>'+esc(h.best.name)+'</h2><p class="muted">'+esc(show(r.Bairro))+', '+esc(r.Cidade)+'</p><div class="detail-grid">'+field('Endereço',r.Endereço)+contactLink(r['Instagram / site'],'Instagram / site')+contactLink(r['Telefone / WhatsApp'],'Telefone / WhatsApp',true)+'</div><h3>Propostas compatíveis com sua busca</h3>'+h.quotes.map(q=>{
+      const a=q.raw;return '<article class="quote-block"><small>A partir de</small><strong class="price">'+esc(Domain.money(q.price))+'</strong><p>'+esc(q.year)+' · '+q.guests+' convidados</p><p>'+esc(Domain.quoteDate(a['Data da cotação (MM/AA)']))+'</p><div class="detail-grid">'+field('Pacote',Domain.missing(a['Pacote identificado'])?'Pacote não informado':a['Pacote identificado'])+field('Condição original do valor',condition(q))+field('Período informado',a['Período identificado'])+field('Forma de pagamento',Domain.missing(a['Pagamento identificado'])?'Pagamento não informado':a['Pagamento identificado'])+field('Duração',duration(a))+['Buffet','Brinquedos','Espaço baby','Cobertura','Climatização','Área total do espaço','Outros serviços inclusos','Observações','Observação da condição'].map(k=>field(k,a[k])).join('')+'</div><p class="disclaimer">'+disclaimer+'</p></article>';
+    }).join('')+Domain.notices(h).map(t=>'<p class="notice">'+esc(t)+'</p>').join('');$('details').showModal();
+  }
+  function setView(v) {view=v;$('ranking').hidden=v!=='ranking';$('comparison').hidden=v!=='comparison';['ranking','compare'].forEach(k=>{const on=(k==='ranking'?v==='ranking':v==='comparison');$(k+'Tab').classList.toggle('selected',on);$(k+'Tab').setAttribute('aria-selected',String(on));});}
+  async function openContribution() {
+    if(!$('contribution').open)$('contribution').showModal();
+    if(ticket&&ticket.expires>Date.now())return;
+    if(loadingTicket)return;loadingTicket=true;$('contributionStatus').textContent='Preparando envio seguro…';$('send').disabled=true;
+    try{ticket=await rpc('beginContribution');$('contributionStatus').textContent='';}catch(e){$('contributionStatus').textContent=e.message;}finally{loadingTicket=false;$('send').disabled=!ticket;}
+  }
+  function chooseType(next) {
+    if(sending)return;type=next;$('contributionForm').hidden=false;$('manualFields').hidden=type!=='manual';$('fileField').hidden=type!=='documents';$('files').required=type==='documents';
+    $('manualFields').querySelectorAll('input,textarea').forEach(el=>el.disabled=type!=='manual');
+    ['guests','year','price'].forEach(k=>$('contributionForm').elements[k].required=type==='manual');
+    document.querySelectorAll('.choice').forEach(el=>el.classList.toggle('selected',el.dataset.type===type));
+  }
+  function readFile(file) {return new Promise((resolve,reject)=>{const r=new FileReader();r.onerror=()=>reject(new Error('Não foi possível ler o arquivo.'));r.onload=()=>resolve({name:file.name,type:file.type,data:String(r.result).split(',')[1]});r.readAsDataURL(file);});}
+  $('contributionForm').addEventListener('submit',async e=>{
+    e.preventDefault();if(sending)return;
+    if(!ticket||ticket.expires<Date.now()){ticket=null;await openContribution();$('contributionStatus').textContent='Sessão renovada. Confira os dados e clique em enviar novamente.';return;}
+    sending=true;$('send').disabled=true;$('send').textContent='Enviando…';$('contributionStatus').textContent='Preparando sua contribuição…';
+    try {
+      const form=e.target,files=type==='documents'?[...$('files').files]:[];
+      if(files.length>3||files.some(f=>f.size>10*1024*1024||!f.size||!['application/pdf','image/jpeg','image/png'].includes(f.type)))throw new Error('Envie até 3 arquivos PDF, JPG ou PNG de até 10 MB cada.');
+      const data=Object.fromEntries(new FormData(form));data.type=type;data.ticket=ticket;data.truth=form.elements.truth.checked;data.consent=form.elements.consent.checked;
+      data.files=await Promise.all(files.map(readFile));$('contributionStatus').textContent='Enviando para conferência. Aguarde…';
+      const result=await rpc('submitContribution',data);$('contributionStatus').textContent=result.message;form.reset();form.hidden=true;ticket=null;
+    }catch(err){$('contributionStatus').textContent=err.message||'Falha no envio. Tente novamente.';}
+    finally{sending=false;$('send').disabled=false;$('send').textContent='Enviar para conferência ⟶';}
+  });
+  document.addEventListener('click',e=>{
+    const detail=e.target.closest('[data-details]');if(detail)details(detail.dataset.details);
+    const remove=e.target.closest('[data-remove]');if(remove){selection[+remove.dataset.remove]=null;renderComparison();}
+    const p=e.target.closest('[data-page]');if(p){page=+p.dataset.page;renderList();}
+    const close=e.target.closest('.close');if(close&&!sending)close.closest('dialog').close();
+    if(e.target.closest('.contribute'))openContribution();
+    const choice=e.target.closest('[data-type]');if(choice){chooseType(choice.dataset.type);if(!ticket)openContribution();}
+  });
+  $('contribution').addEventListener('cancel',e=>{if(sending)e.preventDefault();});
+  $('comparison').addEventListener('change',e=>{if(e.target.matches('[data-slot]')){const k=e.target.value||null;if(k&&selection.includes(k))return;selection[+e.target.dataset.slot]=k;renderComparison();}});
+  $('search').addEventListener('submit',e=>{e.preventDefault();refresh();});$('city').addEventListener('change',()=>{dependentOptions(false);});
+  ['district','sort','venue','min','max'].forEach(k=>$(k).addEventListener(k==='venue'?'input':'change',refresh));
+  $('rankingTab').onclick=()=>setView('ranking');$('compareTab').onclick=()=>setView('comparison');
+  document.querySelector('.tabs').addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?'ranking':e.key==='End'?'comparison':view==='ranking'?'comparison':'ranking';setView(next);$(next==='ranking'?'rankingTab':'compareTab').focus();}});
+  document.querySelector('.theme').onclick=()=>{const dark=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('.theme').textContent=dark?'☼':'☾';try{localStorage.setItem('festa-theme',dark?'dark':'light');}catch(_){}};
+  try{const dark=localStorage.getItem('festa-theme')==='dark';document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('.theme').textContent=dark?'☼':'☾';}catch(_){}
+  $('menu').onclick=()=>{const open=$('navigation').classList.toggle('open');$('menu').setAttribute('aria-expanded',String(open));};
+  $('retry').onclick=load;load();setInterval(()=>{if(!document.hidden)load();},300000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&loaded)load();});
+})();
+</script>
