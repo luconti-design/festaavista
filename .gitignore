@@ -1,0 +1,15 @@
+.clasprc.json
+.clasp.json
+dist/
+.local/
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+*.tsbuildinfo
+
+.vercel/
+*.log
+legacy/*.zip
+
